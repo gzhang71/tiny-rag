@@ -1,4 +1,4 @@
-from ..store.document import Chunk
+from rag.store.document import Chunk
 
 
 def chunk_text(

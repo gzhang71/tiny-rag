@@ -1,19 +1,25 @@
-from .ingest.chunker import chunk_text
-from .ingest.embedder import Embedder
-from .ingest.loader import load_file, load_directory
-from .retrieve.retriever import Retriever
-from .generate.generator import Generator
-from .store.vector_store import VectorStore
+from rag.ingest.chunker import chunk_text
+from rag.ingest.embedder import Embedder
+from rag.ingest.loader import load_file, load_directory
+from rag.retrieve.retriever import Retriever
+from rag.generate.generator import Generator
+from rag.store.vector_store import IndexType, VectorStore
 
 
 class RAGPipeline:
-    def __init__(self, chunk_size: int = 512, overlap: int = 64, top_k: int = 5):
+    def __init__(
+        self,
+        chunk_size: int = 512,
+        overlap: int = 64,
+        top_k: int = 5,
+        index_type: IndexType = IndexType.FLAT,
+    ):
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.top_k = top_k
 
         self.embedder = Embedder()
-        self.store = VectorStore(dim=self.embedder.dim)
+        self.store = VectorStore(dim=self.embedder.dim, index_type=index_type)
         self.retriever = Retriever(self.embedder, self.store)
         self.generator = Generator()
 

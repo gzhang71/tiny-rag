@@ -1,6 +1,6 @@
 import anthropic
 
-from ..store.document import Chunk
+from rag.store.document import Chunk
 
 _MODEL = "claude-opus-4-8"
 

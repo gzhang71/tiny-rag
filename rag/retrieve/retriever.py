@@ -1,6 +1,6 @@
-from ..ingest.embedder import Embedder
-from ..store.document import Chunk
-from ..store.vector_store import VectorStore
+from rag.ingest.embedder import Embedder
+from rag.store.document import Chunk
+from rag.store.vector_store import VectorStore
 
 
 class Retriever:
