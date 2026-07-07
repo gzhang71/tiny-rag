@@ -1,7 +1,8 @@
 from rag.ingest.chunker import chunk_text
 from rag.ingest.embedder import Embedder
 from rag.ingest.loader import load_file, load_directory
-from rag.retrieve.retriever import Retriever
+from rag.retrieve.rerank import Reranker
+from rag.retrieve.retriever import Channel, DEFAULT_CHANNELS, Retriever
 from rag.generate.generator import Generator
 from rag.store.base import BaseVectorStore, StoreBackend
 from rag.store.vector_store import IndexType, VectorStore
@@ -14,6 +15,11 @@ class RAGPipeline:
         overlap: int = 64,
         top_k: int = 5,
         backend: StoreBackend = StoreBackend.FAISS,
+        # retrieval channels
+        channels: tuple[Channel, ...] = DEFAULT_CHANNELS,
+        mmr_lambda: float | None = None,
+        rerank: bool = False,
+        rrf_k: int = 60,
         # FAISS-specific
         index_type: IndexType = IndexType.FLAT,
         # Chroma-specific
@@ -40,7 +46,14 @@ class RAGPipeline:
             )
         else:
             self.store = VectorStore(dim=self.embedder.dim, index_type=index_type)
-        self.retriever = Retriever(self.embedder, self.store)
+        self.retriever = Retriever(
+            self.embedder,
+            self.store,
+            channels=channels,
+            rrf_k=rrf_k,
+            mmr_lambda=mmr_lambda,
+            reranker=Reranker() if rerank else None,
+        )
         self.generator = Generator()
 
     def ingest_text(self, text: str, source: str = "inline") -> int:

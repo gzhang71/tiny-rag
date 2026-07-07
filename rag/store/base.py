@@ -19,4 +19,8 @@ class BaseVectorStore(ABC):
     def search(self, query_embedding: np.ndarray, top_k: int = 5) -> list[tuple[Chunk, float]]: ...
 
     @abstractmethod
+    def chunks(self) -> list[Chunk]:
+        """All stored chunks — used to build lexical (BM25) indexes over the corpus."""
+
+    @abstractmethod
     def __len__(self) -> int: ...

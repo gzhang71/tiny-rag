@@ -52,5 +52,8 @@ class VectorStore(BaseVectorStore):
             if i >= 0
         ]
 
+    def chunks(self) -> list[Chunk]:
+        return list(self._chunks)
+
     def __len__(self) -> int:
         return len(self._chunks)

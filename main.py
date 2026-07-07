@@ -13,7 +13,7 @@ Usage:
 import argparse
 import sys
 
-from rag import RAGPipeline, StoreBackend
+from rag import Channel, DEFAULT_CHANNELS, RAGPipeline, StoreBackend
 
 
 def main() -> None:
@@ -39,13 +39,38 @@ def main() -> None:
         help="Connect to a running Chroma server (`chroma run`) instead of the embedded DB",
     )
     parser.add_argument("--chroma-port", type=int, default=8000)
+    parser.add_argument(
+        "--channels", default=",".join(c.value for c in DEFAULT_CHANNELS),
+        help="Comma-separated retrieval channels, RRF-fused: "
+             f"{', '.join(c.value for c in Channel)} (default: all)",
+    )
+    parser.add_argument(
+        "--mmr", nargs="?", type=float, const=0.7, default=None, metavar="LAMBDA",
+        help="Diversify results with MMR; optional lambda in [0,1], higher = more "
+             "relevance, lower = more diversity (default when flag given: 0.7)",
+    )
+    parser.add_argument(
+        "--rerank", action="store_true",
+        help="Rerank candidates with a local cross-encoder before generation",
+    )
     args = parser.parse_args()
+
+    try:
+        channels = tuple(Channel(name.strip()) for name in args.channels.split(",") if name.strip())
+    except ValueError:
+        parser.error(f"invalid --channels value {args.channels!r}; "
+                     f"choose from: {', '.join(c.value for c in Channel)}")
+    if not channels:
+        parser.error("--channels must name at least one channel")
 
     pipeline = RAGPipeline(
         chunk_size=args.chunk_size,
         overlap=args.overlap,
         top_k=args.top_k,
         backend=StoreBackend(args.store),
+        channels=channels,
+        mmr_lambda=args.mmr,
+        rerank=args.rerank,
         persist_dir=args.persist_dir,
         chroma_host=args.chroma_host,
         chroma_port=args.chroma_port,

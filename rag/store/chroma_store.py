@@ -63,5 +63,12 @@ class ChromaStore(BaseVectorStore):
             )
         ]
 
+    def chunks(self) -> list[Chunk]:
+        result = self.collection.get(include=["documents", "metadatas"])
+        return [
+            Chunk(text=doc, source=meta["source"], chunk_index=meta["chunk_index"])
+            for doc, meta in zip(result["documents"], result["metadatas"])
+        ]
+
     def __len__(self) -> int:
         return self.collection.count()

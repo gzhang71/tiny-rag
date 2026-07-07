@@ -19,6 +19,9 @@ python3 main.py --dir path/to/docs/ "Summarize the key points"
 # persistent Chroma DB: ingest once, then query without a source
 python3 main.py --store chroma --dir path/to/docs/ "Summarize the key points"
 python3 main.py --store chroma "Follow-up question"
+
+# retrieval tunnels (default: all four, RRF-fused), MMR diversity, cross-encoder rerank
+python3 main.py --channels dense,bm25 --mmr 0.7 --rerank --file doc.txt "Question"
 ```
 
 ## Architecture
@@ -33,7 +36,19 @@ python3 main.py --store chroma "Follow-up question"
 
    Both backends rely on L2-normalised vectors and return cosine-similarity scores.
 
-3. **Retrieve** (`rag/retrieve/retriever.py`) — embeds the query, calls the store's `search`, returns `list[tuple[Chunk, float]]` (chunk + cosine score).
+3. **Retrieve** (`rag/retrieve/`) — multi-tunnel: each enabled `Channel` produces a ranked list and the lists are fused with Reciprocal Rank Fusion (`_rrf_fuse` in `retriever.py`, rank-based so per-tunnel score scales never need calibrating). Tunnels live in `rag/retrieve/retrieve_tunnel/` and all inherit the `RetrieveTunnel` ABC (`base.py`: `search(query, top_k) -> list[(Chunk, score)]` + `__len__`):
+   - `DenseTunnel` (`dense.py`) — embeds the query, searches the vector store (semantic).
+   - `BM25Tunnel` (`bm25.py`) — self-contained Okapi BM25, sparse keyword relevance.
+   - `LexicalTunnel` (`lexical.py`) — exact phrase matching; longest contiguous query span found verbatim in a chunk (pure-stopword spans don't count).
+   - `EntityTunnel` (`ner.py`) — rule-based NER (regex: ticket ids, codes, emails, URLs, versions, ISO dates, proper-noun spans) scored by IDF-weighted entity overlap; `extract_entities` is the swap point for a spaCy/transformer model.
+
+   All tunnels except dense are corpus indexes built lazily from `store.chunks()` and rebuilt when the store size changes (works with pre-populated persisted stores); shared tokenizer/stopwords in `retrieve_tunnel/text.py`.
+
+   Post-fusion rerank stages (`rag/retrieve/rerank/`), in order:
+   - **MMR** (`rerank/mmr.py`) — optional diversity-aware selection: greedily maximises `λ·relevance − (1−λ)·max-sim-to-selected` over fresh chunk embeddings; picks the final `top_k` from the fused pool. Enabled by `mmr_lambda` (None = off).
+   - **Cross-encoder** (`rerank/cross_encoder.py`) — optional local cross-encoder (`ms-marco-MiniLM-L-6-v2`) re-scores candidates (after MMR it only re-orders the survivors).
+
+   Tunnels over-fetch `top_k * candidate_multiplier` when any later stage will cut. Returns `list[tuple[Chunk, float]]`; score semantics depend on the last stage (cosine / RRF / MMR objective / cross-encoder logit).
 
 4. **Generate** (`rag/generate/generator.py`) — passes retrieved chunks as context to Claude (`claude-opus-4-8`) via the Anthropic SDK with adaptive thinking and streaming.
 
@@ -43,6 +58,11 @@ All imports are absolute from the `rag` package root (e.g. `from rag.store.docum
 
 | Parameter | Where | Default |
 |---|---|---|
+| `channels` | `RAGPipeline(channels=(Channel.DENSE, Channel.BM25))` | all four |
+| `mmr_lambda` | `RAGPipeline(mmr_lambda=0.7)` — MMR diversity stage, None = off | `None` |
+| `rerank` | `RAGPipeline(rerank=True)` — cross-encoder rerank stage | `False` |
+| `rrf_k` | `RAGPipeline(rrf_k=60)` — RRF fusion constant | 60 |
+| `candidate_multiplier` | `Retriever(candidate_multiplier=4)` — per-channel over-fetch | 4 |
 | `backend` | `RAGPipeline(backend=StoreBackend.CHROMA)` | `FAISS` |
 | `persist_dir` | `RAGPipeline(persist_dir="./chroma_db")` (Chroma only) | `./chroma_db` |
 | `chroma_host` / `chroma_port` | `RAGPipeline(chroma_host="localhost")` — use a `chroma run` server | `None` / 8000 |
