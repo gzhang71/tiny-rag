@@ -3,6 +3,7 @@ from rag.ingest.embedder import Embedder
 from rag.ingest.loader import load_file, load_directory
 from rag.retrieve.retriever import Retriever
 from rag.generate.generator import Generator
+from rag.store.base import BaseVectorStore, StoreBackend
 from rag.store.vector_store import IndexType, VectorStore
 
 
@@ -12,14 +13,33 @@ class RAGPipeline:
         chunk_size: int = 512,
         overlap: int = 64,
         top_k: int = 5,
+        backend: StoreBackend = StoreBackend.FAISS,
+        # FAISS-specific
         index_type: IndexType = IndexType.FLAT,
+        # Chroma-specific
+        persist_dir: str | None = "./chroma_db",
+        collection: str = "tiny_rag",
+        chroma_host: str | None = None,
+        chroma_port: int = 8000,
     ):
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.top_k = top_k
 
         self.embedder = Embedder()
-        self.store = VectorStore(dim=self.embedder.dim, index_type=index_type)
+        self.store: BaseVectorStore
+        if backend == StoreBackend.CHROMA:
+            # imported lazily so the faiss backend works without chromadb installed
+            from rag.store.chroma_store import ChromaStore
+
+            self.store = ChromaStore(
+                persist_dir=persist_dir,
+                collection=collection,
+                host=chroma_host,
+                port=chroma_port,
+            )
+        else:
+            self.store = VectorStore(dim=self.embedder.dim, index_type=index_type)
         self.retriever = Retriever(self.embedder, self.store)
         self.generator = Generator()
 

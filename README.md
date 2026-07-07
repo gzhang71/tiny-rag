@@ -1,6 +1,6 @@
 # tiny_rag
 
-A minimal RAG (Retrieval-Augmented Generation) system built with FAISS, sentence-transformers, and Claude.
+A minimal RAG (Retrieval-Augmented Generation) system built with FAISS/Chroma, sentence-transformers, and Claude.
 
 ## Installation
 
@@ -22,6 +22,25 @@ python main.py --file path/to/doc.txt "What is the main topic?"
 python main.py --dir path/to/docs/ "Summarize the key points"
 ```
 
+### Persistent vector DB (Chroma)
+
+With `--store chroma`, embeddings are stored in a local Chroma database (default `./chroma_db`), so you ingest once and query as many times as you like:
+
+```bash
+# ingest once (re-running upserts — no duplicates)
+python main.py --store chroma --dir path/to/docs/ "Summarize the key points"
+
+# later: query without re-ingesting
+python main.py --store chroma "What are the key risks mentioned?"
+```
+
+To run Chroma as a standalone server on your Mac instead of embedded mode:
+
+```bash
+chroma run --path ./chroma_data          # in one terminal
+python main.py --store chroma --chroma-host localhost "Your question"
+```
+
 ### Options
 
 | Flag | Default | Description |
@@ -29,6 +48,9 @@ python main.py --dir path/to/docs/ "Summarize the key points"
 | `--top-k` | 5 | Number of chunks to retrieve |
 | `--chunk-size` | 512 | Characters per chunk |
 | `--overlap` | 64 | Overlap between chunks |
+| `--store` | `faiss` | Vector store: `faiss` (in-memory) or `chroma` (persistent DB) |
+| `--persist-dir` | `./chroma_db` | Chroma DB directory (embedded mode) |
+| `--chroma-host` / `--chroma-port` | — / 8000 | Connect to a running `chroma run` server |
 
 ## Python API
 
@@ -44,6 +66,12 @@ print(pipeline.query("What is this about?"))
 pipeline = RAGPipeline(index_type=IndexType.HNSW)
 pipeline.ingest_directory("./docs/")
 print(pipeline.query("What are the key themes?"))
+
+# Chroma: persistent vector DB — survives restarts, ingest once / query forever
+from rag import StoreBackend
+pipeline = RAGPipeline(backend=StoreBackend.CHROMA, persist_dir="./chroma_db")
+pipeline.ingest_directory("./docs/")   # only needed the first time
+print(pipeline.query("What are the key themes?"))
 ```
 
 ## Architecture
@@ -54,7 +82,11 @@ Retrieve: embed query → ANN search → top-k chunks
 Generate: chunks + query → Claude → answer
 ```
 
-**Vector index** — defaults to exact cosine search (`FLAT`). Switch to `HNSW` for large corpora to get sub-linear query time at the cost of approximate results. Both use L2-normalised vectors so inner product equals cosine similarity.
+**Vector store** — two backends behind a common interface (`BaseVectorStore`):
+- `faiss` (default) — in-process, in-memory. `FLAT` gives exact cosine search; switch to `HNSW` for large corpora to get sub-linear query time at the cost of approximate results.
+- `chroma` — a real vector DB that runs entirely on your machine: embedded and persisted to a local directory by default, or as a standalone server via `chroma run`. Uses cosine space and stable `source:chunk_index` ids, so re-ingesting a document updates it in place.
+
+Both backends consume the same L2-normalised embeddings and return cosine-similarity scores, so results are comparable across backends.
 
 **Embeddings** — `all-MiniLM-L6-v2` via sentence-transformers (runs locally, no API key needed).
 

@@ -1,10 +1,10 @@
 from rag.ingest.embedder import Embedder
+from rag.store.base import BaseVectorStore
 from rag.store.document import Chunk
-from rag.store.vector_store import VectorStore
 
 
 class Retriever:
-    def __init__(self, embedder: Embedder, store: VectorStore):
+    def __init__(self, embedder: Embedder, store: BaseVectorStore):
         self.embedder = embedder
         self.store = store
 

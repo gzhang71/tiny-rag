@@ -3,6 +3,7 @@ from enum import Enum
 import faiss
 import numpy as np
 
+from rag.store.base import BaseVectorStore
 from rag.store.document import Chunk
 
 
@@ -11,7 +12,7 @@ class IndexType(str, Enum):
     HNSW = "hnsw"   # approximate, sub-linear search — best for > ~10k chunks
 
 
-class VectorStore:
+class VectorStore(BaseVectorStore):
     def __init__(
         self,
         dim: int,
