@@ -11,7 +11,35 @@ carry. lambda=1 is pure relevance; lower values trade relevance for coverage.
 """
 import numpy as np
 
+from rag.ingest.embedder import Embedder
+from rag.retrieve.rerank.base import RerankStage
 from rag.store.document import Chunk
+
+
+class MMRReranker(RerankStage):
+    """MMR rerank stage: embeds the query and candidates, then hands off to
+    `mmr_select`. Selects the final `top_k`, so a later stage (e.g. the
+    cross-encoder) only re-orders the survivors."""
+
+    def __init__(self, embedder: Embedder, lambda_: float = 0.7):
+        if not 0.0 <= lambda_ <= 1.0:
+            raise ValueError("lambda_ must be in [0, 1]")
+        self.embedder = embedder
+        self.lambda_ = lambda_
+
+    def rerank(
+        self, query: str, candidates: list[tuple[Chunk, float]], top_k: int = 5
+    ) -> list[tuple[Chunk, float]]:
+        if not candidates:
+            return []
+        chunks = [chunk for chunk, _ in candidates]
+        return mmr_select(
+            self.embedder.embed_one(query),
+            self.embedder.embed([c.text for c in chunks]),
+            chunks,
+            top_k=top_k,
+            lambda_=self.lambda_,
+        )
 
 
 def mmr_select(

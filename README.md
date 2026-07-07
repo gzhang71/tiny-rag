@@ -167,6 +167,7 @@ tiny_rag/
     │   │   ├── ner.py             # EntityTunnel: rule-based NER + IDF-weighted entity overlap
     │   │   └── text.py            # shared tokenizer + stopwords
     │   └── rerank/                # post-fusion stages, applied in order
+    │       ├── base.py            # RerankStage ABC — all stages inherit this
     │       ├── mmr.py             # MMR diversity selection
     │       └── cross_encoder.py   # local cross-encoder reranker (ms-marco-MiniLM-L-6-v2)
     └── generate/

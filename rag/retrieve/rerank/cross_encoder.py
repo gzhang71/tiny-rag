@@ -1,11 +1,12 @@
 from sentence_transformers import CrossEncoder
 
+from rag.retrieve.rerank.base import RerankStage
 from rag.store.document import Chunk
 
 _MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 
-class Reranker:
+class CrossEncoderReranker(RerankStage):
     """Cross-encoder rerank stage: scores each (query, chunk) pair jointly,
     which is far more accurate than embedding similarity but too slow to run
     over the whole corpus — so it only re-orders the retrieved candidate pool.

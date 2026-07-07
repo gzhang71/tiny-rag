@@ -1,7 +1,7 @@
 from rag.ingest.chunker import chunk_text
 from rag.ingest.embedder import Embedder
 from rag.ingest.loader import load_file, load_directory
-from rag.retrieve.rerank import Reranker
+from rag.retrieve.rerank import CrossEncoderReranker
 from rag.retrieve.retriever import Channel, DEFAULT_CHANNELS, Retriever
 from rag.generate.generator import Generator
 from rag.store.base import BaseVectorStore, StoreBackend
@@ -52,7 +52,7 @@ class RAGPipeline:
             channels=channels,
             rrf_k=rrf_k,
             mmr_lambda=mmr_lambda,
-            reranker=Reranker() if rerank else None,
+            reranker=CrossEncoderReranker() if rerank else None,
         )
         self.generator = Generator()
 

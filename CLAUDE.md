@@ -44,9 +44,9 @@ python3 main.py --channels dense,bm25 --mmr 0.7 --rerank --file doc.txt "Questio
 
    All tunnels except dense are corpus indexes built lazily from `store.chunks()` and rebuilt when the store size changes (works with pre-populated persisted stores); shared tokenizer/stopwords in `retrieve_tunnel/text.py`.
 
-   Post-fusion rerank stages (`rag/retrieve/rerank/`), in order:
-   - **MMR** (`rerank/mmr.py`) — optional diversity-aware selection: greedily maximises `λ·relevance − (1−λ)·max-sim-to-selected` over fresh chunk embeddings; picks the final `top_k` from the fused pool. Enabled by `mmr_lambda` (None = off).
-   - **Cross-encoder** (`rerank/cross_encoder.py`) — optional local cross-encoder (`ms-marco-MiniLM-L-6-v2`) re-scores candidates (after MMR it only re-orders the survivors).
+   Post-fusion rerank stages (`rag/retrieve/rerank/`) all inherit the `RerankStage` ABC (`rerank/base.py`: `rerank(query, candidates, top_k) -> list[(Chunk, score)]`); `Retriever` applies its enabled stages in order (`Retriever.stages`), each receiving the previous stage's output:
+   - **MMR** (`rerank/mmr.py`, `MMRReranker`) — optional diversity-aware selection: greedily maximises `λ·relevance − (1−λ)·max-sim-to-selected` over fresh chunk embeddings; picks the final `top_k` from the fused pool. Enabled by `mmr_lambda` (None = off).
+   - **Cross-encoder** (`rerank/cross_encoder.py`, `CrossEncoderReranker`) — optional local cross-encoder (`ms-marco-MiniLM-L-6-v2`) re-scores candidates (after MMR it only re-orders the survivors).
 
    Tunnels over-fetch `top_k * candidate_multiplier` when any later stage will cut. Returns `list[tuple[Chunk, float]]`; score semantics depend on the last stage (cosine / RRF / MMR objective / cross-encoder logit).
 

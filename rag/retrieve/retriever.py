@@ -1,7 +1,7 @@
 from enum import Enum
 
 from rag.ingest.embedder import Embedder
-from rag.retrieve.rerank import Reranker, mmr_select
+from rag.retrieve.rerank import MMRReranker, RerankStage
 from rag.retrieve.retrieve_tunnel import (
     BM25Tunnel,
     DenseTunnel,
@@ -55,20 +55,23 @@ class Retriever:
         channels: tuple[Channel, ...] = DEFAULT_CHANNELS,
         rrf_k: int = 60,
         mmr_lambda: float | None = None,  # None = off; 0..1 trades relevance for diversity
-        reranker: Reranker | None = None,
+        reranker: RerankStage | None = None,
         candidate_multiplier: int = 4,  # pool size per tunnel = top_k * this, before fusion/rerank
     ):
         if not channels:
             raise ValueError("at least one retrieval channel is required")
-        if mmr_lambda is not None and not 0.0 <= mmr_lambda <= 1.0:
-            raise ValueError("mmr_lambda must be in [0, 1]")
         self.embedder = embedder
         self.store = store
         self.channels = tuple(channels)
         self.rrf_k = rrf_k
-        self.mmr_lambda = mmr_lambda
-        self.reranker = reranker
         self.candidate_multiplier = candidate_multiplier
+        # rerank stages run in order over the fused pool; MMR first (selects
+        # the final top_k), then any supplied stage re-orders the survivors
+        self.stages: list[RerankStage] = []
+        if mmr_lambda is not None:
+            self.stages.append(MMRReranker(embedder, lambda_=mmr_lambda))
+        if reranker is not None:
+            self.stages.append(reranker)
         # corpus tunnels are rebuilt lazily whenever the store contents change,
         # so they work with persisted stores that already hold chunks at startup
         self._tunnels: dict[Channel, RetrieveTunnel] = {
@@ -84,9 +87,9 @@ class Retriever:
         return tunnel
 
     def retrieve(self, query: str, top_k: int = 5) -> list[tuple[Chunk, float]]:
-        # over-fetch when a later stage (fusion, MMR, or rerank) will re-order and cut
+        # over-fetch when a later stage (fusion or rerank) will re-order and cut
         pool = top_k * self.candidate_multiplier if (
-            len(self.channels) > 1 or self.mmr_lambda is not None or self.reranker
+            len(self.channels) > 1 or self.stages
         ) else top_k
 
         result_lists = [self._tunnel(ch).search(query, top_k=pool) for ch in self.channels]
@@ -95,18 +98,6 @@ class Retriever:
         else:
             candidates = _rrf_fuse(result_lists, k=self.rrf_k)
 
-        if self.mmr_lambda is not None:
-            # diversity-aware selection of the final top_k from the fused pool;
-            # a following rerank stage then only re-orders these survivors
-            chunks = [chunk for chunk, _ in candidates]
-            candidates = mmr_select(
-                self.embedder.embed_one(query),
-                self.embedder.embed([c.text for c in chunks]),
-                chunks,
-                top_k=top_k,
-                lambda_=self.mmr_lambda,
-            )
-
-        if self.reranker:
-            return self.reranker.rerank(query, candidates, top_k=top_k)
+        for stage in self.stages:
+            candidates = stage.rerank(query, candidates, top_k=top_k)
         return candidates[:top_k]
